@@ -187,6 +187,17 @@ def run_example():
         )
         async_disk_attach.wait()
 
+        # Detach data disk
+        print('\nDetach Data Disk')
+        data_disks = virtual_machine.storage_profile.data_disks
+        data_disks[:] = [disk for disk in data_disks if disk.name != 'mydatadisk1']
+        async_vm_update = compute_client.virtual_machines.create_or_update(
+            GROUP_NAME,
+            VM_NAME,
+            virtual_machine
+        )
+        virtual_machine = async_vm_update.result()
+        
         # Deallocating the VM (in preparation for a disk resize)
         print('\nDeallocating the VM (to prepare for a disk resize)')
         async_vm_deallocate = compute_client.virtual_machines.deallocate(
