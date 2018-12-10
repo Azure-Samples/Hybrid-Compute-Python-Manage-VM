@@ -85,7 +85,7 @@ def run_example():
 
     # By Default, use AzureStack supported profile
     KnownProfiles.default.use(KnownProfiles.v2018_03_01_hybrid)
-    logging.basicConfig(level=logging.BASIC_FORMAT)
+    logging.basicConfig(level=logging.ERROR)
 
     resource_client = ResourceManagementClient(
         credentials, subscription_id, base_url=mystack_cloud.endpoints.resource_manager)
@@ -197,7 +197,7 @@ def run_example():
             virtual_machine
         )
         virtual_machine = async_vm_update.result()
-        
+
         # Deallocating the VM (in preparation for a disk resize)
         print('\nDeallocating the VM (to prepare for a disk resize)')
         async_vm_deallocate = compute_client.virtual_machines.deallocate(
