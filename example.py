@@ -84,7 +84,7 @@ def run_example():
     )
 
     # By Default, use AzureStack supported profile
-    KnownProfiles.default.use(KnownProfiles.v2018_03_01_hybrid)
+    KnownProfiles.default.use(KnownProfiles.v2019_03_01_hybrid)
     logging.basicConfig(level=logging.ERROR)
 
     resource_client = ResourceManagementClient(
