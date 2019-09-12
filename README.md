@@ -1,7 +1,11 @@
 ---
-services: Azure-Stack
-platforms: python
-author: viananth
+page_type: sample
+languages:
+- python
+products:
+- azure
+description: "These samples demonstrate how to perform common management tasks"
+urlFragment: Hybrid-Compute-Python-Manage-VM
 ---
 
 # Hybrid-Compute-Python-Manage-VM
