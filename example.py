@@ -15,12 +15,12 @@ import traceback
 import uuid
 import logging
 
-from azure.common.credentials import ServicePrincipalCredentials
 from azure.mgmt.resource import ResourceManagementClient
 from azure.mgmt.storage import StorageManagementClient
 from azure.mgmt.network import NetworkManagementClient
 from azure.mgmt.compute import ComputeManagementClient
 from azure.mgmt.compute.models import DiskCreateOption
+from azure.identity import ClientSecretCredential
 
 from msrestazure.azure_exceptions import CloudError
 
@@ -75,26 +75,43 @@ def run_example():
     #
     mystack_cloud = get_cloud_from_metadata_endpoint(
         os.environ['ARM_ENDPOINT'])
+    
     subscription_id = os.environ['AZURE_SUBSCRIPTION_ID']
-    credentials = ServicePrincipalCredentials(
-        client_id=os.environ['AZURE_CLIENT_ID'],
-        secret=os.environ['AZURE_CLIENT_SECRET'],
-        tenant=os.environ['AZURE_TENANT_ID'],
-        cloud_environment=mystack_cloud
-    )
 
-    # By Default, use AzureStack supported profile
-    KnownProfiles.default.use(KnownProfiles.v2019_03_01_hybrid)
+    credentials = ClientSecretCredential(
+        client_id=os.environ['AZURE_CLIENT_ID'],
+        client_secret=os.environ['AZURE_CLIENT_SECRET'],
+        tenant_id=os.environ['AZURE_TENANT_ID'],
+        authority=mystack_cloud.endpoints.active_directory)
+
     logging.basicConfig(level=logging.ERROR)
 
     resource_client = ResourceManagementClient(
-        credentials, subscription_id, base_url=mystack_cloud.endpoints.resource_manager)
+        credentials, subscription_id,
+        base_url=mystack_cloud.endpoints.resource_manager,
+        profile=KnownProfiles.v2020_09_01_hybrid,
+        credential_scopes=[mystack_cloud.endpoints.active_directory_resource_id + "/.default"])
+
     compute_client = ComputeManagementClient(
-        credentials, subscription_id, base_url=mystack_cloud.endpoints.resource_manager)
+        credentials,
+        subscription_id,
+        base_url=mystack_cloud.endpoints.resource_manager,
+        profile=KnownProfiles.v2020_09_01_hybrid,
+        credential_scopes=[mystack_cloud.endpoints.active_directory_resource_id + "/.default"])
+
     storage_client = StorageManagementClient(
-        credentials, subscription_id, base_url=mystack_cloud.endpoints.resource_manager)
+        credentials,
+        subscription_id,
+        base_url=mystack_cloud.endpoints.resource_manager,
+        profile=KnownProfiles.v2020_09_01_hybrid,
+        credential_scopes=[mystack_cloud.endpoints.active_directory_resource_id + "/.default"])
+
     network_client = NetworkManagementClient(
-        credentials, subscription_id, base_url=mystack_cloud.endpoints.resource_manager)
+        credentials,
+        subscription_id,
+        base_url=mystack_cloud.endpoints.resource_manager,
+        profile=KnownProfiles.v2020_09_01_hybrid,
+        credential_scopes=[mystack_cloud.endpoints.active_directory_resource_id + "/.default"])
 
     ###########
     # Prepare #
@@ -102,13 +119,12 @@ def run_example():
 
     # Create Resource group
     print('\nCreate Resource Group')
-    resource_client.resource_groups.create_or_update(
-        GROUP_NAME, {'location': LOCATION})
+    resource_client.resource_groups.create_or_update(GROUP_NAME, {'location': LOCATION})
 
     try:
         # Create a storage account
         print('\nCreate a storage account')
-        storage_async_operation = storage_client.storage_accounts.create(
+        storage_async_operation = storage_client.storage_accounts.begin_create(
             GROUP_NAME,
             STORAGE_ACCOUNT_NAME,
             {
@@ -117,7 +133,7 @@ def run_example():
                 'location': LOCATION
             }
         )
-        storage_async_operation.wait()
+        storage_async_operation.result()
 
         # Create a NIC
         nic = create_nic(network_client)
@@ -129,13 +145,15 @@ def run_example():
         # Create Linux VM
         print('\nCreating Linux Virtual Machine')
         vm_parameters = create_vm_parameters(nic.id, VM_REFERENCE['linux'])
-        async_vm_creation = compute_client.virtual_machines.create_or_update(
-            GROUP_NAME, VM_NAME, vm_parameters)
-        async_vm_creation.wait()
+        async_vm_creation = compute_client.virtual_machines.begin_create_or_update(
+            GROUP_NAME,
+            VM_NAME,
+            vm_parameters)
+        async_vm_creation.result()
 
         # Tag the VM
         print('\nTag Virtual Machine')
-        async_vm_update = compute_client.virtual_machines.create_or_update(
+        async_vm_update = compute_client.virtual_machines.begin_create_or_update(
             GROUP_NAME,
             VM_NAME,
             {
@@ -146,11 +164,11 @@ def run_example():
                 }
             }
         )
-        async_vm_update.wait()
+        async_vm_update.result()
 
         # Create managed data disk
         print('\nCreate (empty) managed Data Disk')
-        async_disk_creation = compute_client.disks.create_or_update(
+        async_disk_creation = compute_client.disks.begin_create_or_update(
             GROUP_NAME,
             'mydatadisk1',
             {
@@ -180,18 +198,18 @@ def run_example():
                 'id': data_disk.id
             }
         })
-        async_disk_attach = compute_client.virtual_machines.create_or_update(
+        async_disk_attach = compute_client.virtual_machines.begin_create_or_update(
             GROUP_NAME,
             virtual_machine.name,
             virtual_machine
         )
-        async_disk_attach.wait()
+        async_disk_attach.result()
 
         # Detach data disk
         print('\nDetach Data Disk')
         data_disks = virtual_machine.storage_profile.data_disks
         data_disks[:] = [disk for disk in data_disks if disk.name != 'mydatadisk1']
-        async_vm_update = compute_client.virtual_machines.create_or_update(
+        async_vm_update = compute_client.virtual_machines.begin_create_or_update(
             GROUP_NAME,
             VM_NAME,
             virtual_machine
@@ -200,9 +218,9 @@ def run_example():
 
         # Deallocating the VM (in preparation for a disk resize)
         print('\nDeallocating the VM (to prepare for a disk resize)')
-        async_vm_deallocate = compute_client.virtual_machines.deallocate(
+        async_vm_deallocate = compute_client.virtual_machines.begin_deallocate(
             GROUP_NAME, VM_NAME)
-        async_vm_deallocate.wait()
+        async_vm_deallocate.result()
 
         # Increase OS disk size by 10 GB
         print('\nUpdate OS disk size')
@@ -216,30 +234,30 @@ def run_example():
 
         os_disk.disk_size_gb += 10
 
-        async_disk_update = compute_client.disks.create_or_update(
+        async_disk_update = compute_client.disks.begin_create_or_update(
             GROUP_NAME,
             os_disk.name,
             os_disk
         )
-        async_disk_update.wait()
+        async_disk_update.result()
 
         # Start the VM
         print('\nStart VM')
-        async_vm_start = compute_client.virtual_machines.start(
+        async_vm_start = compute_client.virtual_machines.begin_start(
             GROUP_NAME, VM_NAME)
-        async_vm_start.wait()
+        async_vm_start.result()
 
         # Restart the VM
         print('\nRestart VM')
-        async_vm_restart = compute_client.virtual_machines.restart(
+        async_vm_restart = compute_client.virtual_machines.begin_restart(
             GROUP_NAME, VM_NAME)
-        async_vm_restart.wait()
+        async_vm_restart.result()
 
         # Stop the VM
         print('\nStop VM')
-        async_vm_stop = compute_client.virtual_machines.power_off(
+        async_vm_stop = compute_client.virtual_machines.begin_power_off(
             GROUP_NAME, VM_NAME)
-        async_vm_stop.wait()
+        async_vm_stop.result()
 
         # List VMs in subscription
         print('\nList VMs in subscription')
@@ -253,17 +271,17 @@ def run_example():
 
         # Delete VM
         print('\nDelete VM')
-        async_vm_delete = compute_client.virtual_machines.delete(
+        async_vm_delete = compute_client.virtual_machines.begin_delete(
             GROUP_NAME, VM_NAME)
-        async_vm_delete.wait()
+        async_vm_delete.result()
 
         # Create Windows VM
         print('\nCreating Windows Virtual Machine')
         # Recycling NIC of previous VM
         vm_parameters = create_vm_parameters(nic.id, VM_REFERENCE['windows'])
-        async_vm_creation = compute_client.virtual_machines.create_or_update(
+        async_vm_creation = compute_client.virtual_machines.begin_create_or_update(
             GROUP_NAME, VM_NAME, vm_parameters)
-        async_vm_creation.wait()
+        async_vm_creation.result()
     except CloudError:
         print('A VM operation failed:', traceback.format_exc(), sep='\n')
     else:
@@ -271,9 +289,9 @@ def run_example():
     finally:
         # Delete Resource group and everything in it
         print('\nDelete Resource Group')
-        delete_async_operation = resource_client.resource_groups.delete(
+        delete_async_operation = resource_client.resource_groups.begin_delete(
             GROUP_NAME)
-        delete_async_operation.wait()
+        delete_async_operation.result()
         print("\nDeleted: {}".format(GROUP_NAME))
 
 
@@ -282,7 +300,7 @@ def create_nic(network_client):
     """
     # Create VNet
     print('\nCreate Vnet')
-    async_vnet_creation = network_client.virtual_networks.create_or_update(
+    async_vnet_creation = network_client.virtual_networks.begin_create_or_update(
         GROUP_NAME,
         VNET_NAME,
         {
@@ -292,11 +310,11 @@ def create_nic(network_client):
             }
         }
     )
-    async_vnet_creation.wait()
+    async_vnet_creation.result()
 
     # Create Subnet
     print('\nCreate Subnet')
-    async_subnet_creation = network_client.subnets.create_or_update(
+    async_subnet_creation = network_client.subnets.begin_create_or_update(
         GROUP_NAME,
         VNET_NAME,
         SUBNET_NAME,
@@ -306,7 +324,7 @@ def create_nic(network_client):
 
     # Create NIC
     print('\nCreate NIC')
-    async_nic_creation = network_client.network_interfaces.create_or_update(
+    async_nic_creation = network_client.network_interfaces.begin_create_or_update(
         GROUP_NAME,
         NIC_NAME,
         {
