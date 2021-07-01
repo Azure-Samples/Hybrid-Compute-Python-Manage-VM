@@ -85,33 +85,34 @@ def run_example():
         authority=mystack_cloud.endpoints.active_directory)
 
     logging.basicConfig(level=logging.ERROR)
+    scope = "openid profile offline_access" + " " + mystack_cloud.endpoints.active_directory_resource_id + "/.default"
 
     resource_client = ResourceManagementClient(
         credentials, subscription_id,
         base_url=mystack_cloud.endpoints.resource_manager,
         profile=KnownProfiles.v2020_09_01_hybrid,
-        credential_scopes=[mystack_cloud.endpoints.active_directory_resource_id + "/.default"])
+        credential_scopes=[scope])
 
     compute_client = ComputeManagementClient(
         credentials,
         subscription_id,
         base_url=mystack_cloud.endpoints.resource_manager,
         profile=KnownProfiles.v2020_09_01_hybrid,
-        credential_scopes=[mystack_cloud.endpoints.active_directory_resource_id + "/.default"])
+        credential_scopes=[scope])
 
     storage_client = StorageManagementClient(
         credentials,
         subscription_id,
         base_url=mystack_cloud.endpoints.resource_manager,
         profile=KnownProfiles.v2020_09_01_hybrid,
-        credential_scopes=[mystack_cloud.endpoints.active_directory_resource_id + "/.default"])
+        credential_scopes=[scope])
 
     network_client = NetworkManagementClient(
         credentials,
         subscription_id,
         base_url=mystack_cloud.endpoints.resource_manager,
         profile=KnownProfiles.v2020_09_01_hybrid,
-        credential_scopes=[mystack_cloud.endpoints.active_directory_resource_id + "/.default"])
+        credential_scopes=[scope])
 
     ###########
     # Prepare #
